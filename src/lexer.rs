@@ -49,7 +49,7 @@ impl<'a> Lexer<'a> {
         self.it.clone().next()
     }
 
-    /// Returns a `Token` where its `tag` is `matched_tag` if the next character in the source is equal to `next_char`, otherwise its tag is `tag`
+    /// Returns a `Token` where its `tag` field is `matched_tag` if the next character in the source is equal to `next_char`, otherwise its tag is `tag`
     /// 
     /// This method is used internally to scan double-length tokens: '+=', '-=', '*=' and so on.
     fn dual_op(&mut self, next_char: char, tag: Tag, matched_tag: Tag) -> Token<'a> {
@@ -63,7 +63,9 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    /// Returns a 
+    /// Scans a string literal and returns a `Token`
+    /// 
+    /// String literals may contain newlines('\n') and escaped characters. They can either be closed or unclosed - with or without a closing quotation mark(").
     fn lex_string(&mut self) -> Token<'a> { 
         let start = self.prev.0;
         let mut closed = false;
@@ -91,10 +93,12 @@ impl<'a> Lexer<'a> {
         Token::new(Tag::String { closed }, &self.src[start..end], start, self.line)
     }
 
+    // TODO: add support for floats
     fn lex_number(&mut self) -> Token<'a> {
         let start = self.prev.0;
 
         // Redundant digit check 
+        // TODO: Revisit whether the redundant digit is ideal
         while self.prev.1.is_ascii_digit() { 
             self.advance();
         }
