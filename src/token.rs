@@ -46,6 +46,7 @@ pub enum Tag {
 #[derive(Debug, Clone)]
 pub struct Token<'s> {
     pub tag: Tag,
+    pub pos: usize,
     pub value: &'s str,
     pub line: u32
 }
@@ -53,10 +54,11 @@ pub struct Token<'s> {
 
 
 impl<'s> Token<'s> {
-    pub fn new(tag: Tag, value: &'s str, line: u32) -> Self {
+    pub fn new(tag: Tag, value: &'s str, pos: usize, line: u32) -> Self {
         Self {
             tag,
             value,
+            pos,
             line
         }
     }
