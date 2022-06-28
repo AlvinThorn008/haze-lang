@@ -18,7 +18,12 @@ impl<'s> Iterator for Lexer<'s> {
     }
 }
 
+/// A lexer that turns a string literal to a stream of tokens.
+/// 
+/// The `Lexer` type borrows the initial string literal.
 impl<'a> Lexer<'a> {
+
+    /// Creates a `Lexer` from a string literal.
     pub fn from(src: &'a str) -> Self {
         let mut lexer = Self {
             src: src,
@@ -30,18 +35,23 @@ impl<'a> Lexer<'a> {
         lexer
     }
 
+    /// Consumes the next character of the source.
     fn advance(&mut self) {
         if let Some(char_idx_tuple) = self.it.next() {
             self.prev = char_idx_tuple;
         } else {
-            self.prev = (self.src.len(), '\x00')
+            self.prev = (self.src.len(), '\x00') // '\x00' acts a null value - Don't worry about it
         }
     }
 
+    /// Returns the next character of the source without consuming it.
     fn peek(&mut self) -> Option<(usize, char)> {
         self.it.clone().next()
     }
 
+    /// Returns a `Token` where its `tag` is `matched_tag` if the next character in the source is equal to `next_char`, otherwise its tag is `tag`
+    /// 
+    /// This method is used internally to scan double-length tokens: '+=', '-=', '*=' and so on.
     fn dual_op(&mut self, next_char: char, tag: Tag, matched_tag: Tag) -> Token<'a> {
         let start = self.prev.0;
         match self.peek() {
@@ -53,7 +63,8 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn lex_string(&mut self) -> Option<Token<'a>> { // "hello"
+    /// Returns a 
+    fn lex_string(&mut self) -> Token<'a> { 
         let start = self.prev.0;
         let mut closed = false;
         while !self.done() {
@@ -76,11 +87,11 @@ impl<'a> Lexer<'a> {
                 _ => {}
             }
         }
-        let last_char_len = self.prev.1.len_utf8();
-        Some(Token::new(Tag::String { closed }, &self.src[start..self.prev.0 + last_char_len], start, self.line))
+        let end = self.prev.1.len_utf8() + self.prev.0;
+        Token::new(Tag::String { closed }, &self.src[start..end], start, self.line)
     }
 
-    fn lex_number(&mut self) -> Option<Token<'a>> {
+    fn lex_number(&mut self) -> Token<'a> {
         let start = self.prev.0;
 
         // Redundant digit check 
@@ -88,19 +99,24 @@ impl<'a> Lexer<'a> {
             self.advance();
         }
 
-        // so 
-        Some(Token::new(Tag::Number, &self.src[start..self.prev.0], start, self.line))
-        // while let Some(&(_,char)) = self.peek() {
-        //     if char.is_ascii_digit() { let _ = self.advance(); }
-        //     else { break; }
-        // }
+        // so the length of the last char needn't be added
+        Token::new(Tag::Number, &self.src[start..self.prev.0], start, self.line)
     }
 
-    fn lex_ident(&mut self) {
+    fn lex_ident(&mut self) -> Token<'a> {
+        let start = self.prev.0;
+
         while let Some((_, char)) = self.peek() {
-            if char.is_alphabetic() || char == '_'  { let _ = self.advance(); }
+            if char.is_alphabetic() || char == '_'  { self.advance(); }
             else { break; }
         }
+
+        let end = self.prev.0 + self.prev.1.len_utf8();
+        let lit = &self.src[start..end];
+
+        let tag = Self::match_keyword(lit);
+
+        Token::new(tag, lit, start, self.line)
     }
 
     fn match_keyword(ident: &str) -> Tag {
@@ -164,15 +180,16 @@ impl<'a> Lexer<'a> {
             ')' => Some(Token::new(Tag::RParen, &self.src[start..start + 1], start, self.line)),
 
             '"' => {
-                self.lex_string()
+                Some(self.lex_string())
             }
             
             n if n.is_ascii_digit() => {
-                self.lex_number()
+                Some(self.lex_number())
             }
 
-            // n if n.is_alphabetic() || n == '_' => {
-            // }
+            n if n.is_alphabetic() || n == '_' => {
+                Some(self.lex_ident())
+            }
     
             _ => {
                 let last_char_len = self.prev.1.len_utf8();
