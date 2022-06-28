@@ -135,7 +135,7 @@ impl<'a> Lexer<'a> {
         self.prev.0 >= self.src.len() - 1
     }
 
-    pub fn next_token(&mut self) -> Option<Token<'a>> {
+    fn next_token(&mut self) -> Option<Token<'a>> {
         self.skip_whitespace();
 
         if self.done() { return None; }
