@@ -5,18 +5,20 @@ use crate::token::{Tag, Token};
 pub struct Lexer<'a> {
     pub(crate) src: &'a str,
     it: Peekable<CharIndices<'a>>,
-    offset: usize,
+    prev: (usize, char),
     line: u32
 }
 
 impl<'a> Lexer<'a> {
     pub fn from(src: &'a str) -> Self {
-        Self {
+        let lexer = Self {
             src: src,
             it: src.char_indices().peekable(),
-            offset: 0,
+            prev: (0, '\x00'),
             line: 1
-        }
+        };
+        lexer.advance();
+        lexer
     }
 
     fn range_lexed<T>(&mut self, lex_fn: impl FnOnce(&mut Self) -> T) -> (Range<usize>, T) {
@@ -27,7 +29,7 @@ impl<'a> Lexer<'a> {
 
     fn advance(&mut self) -> Option<(usize, char)> {
         let next = self.it.next()?;
-        self.offset = next.0;
+        self.prev = next;
         Some(next)
     }
 
@@ -36,10 +38,11 @@ impl<'a> Lexer<'a> {
     }
 
     fn dual_op(&mut self, next_char: char, tag: Tag, matched_tag: Tag) -> Token {
+
         match self.peek() {
             Some(&(_, char)) if char == next_char => {
                 let _ = self.advance();
-                Token::new(matched_tag, self.offset..self.offset + 2, self.line)
+                Token::new(matched_tag, , self.line)
             },
             _ => Token::new(tag, self.offset..self.offset + 1, self.line), 
         }
@@ -63,10 +66,13 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_number(&mut self) {
-        while let Some(&(_,char)) = self.peek() {
-            if char.is_ascii_digit() { let _ = self.advance(); }
-            else { break; }
+        while self.prev.1.is_ascii_digit() {
+            let _ = self.advance();
         }
+        // while let Some(&(_,char)) = self.peek() {
+        //     if char.is_ascii_digit() { let _ = self.advance(); }
+        //     else { break; }
+        // }
     }
 
     fn lex_ident(&mut self) {
@@ -131,7 +137,8 @@ impl<'a> Lexer<'a> {
                 ')' => Some(Token::new(Tag::RParen, index..index + 1, self.line)),
 
                 '"' => {
-                    let (loc, closed) = self.range_lexed(|lexer| lexer.lex_string());
+                    let start = self.prev.0;
+                    lexer.lex_string();
 
                     Some(Token::new(Tag::String { closed }, loc, self.line))
                 }
@@ -151,7 +158,7 @@ impl<'a> Lexer<'a> {
 
                     Some(Token::new(tag, loc, self.line))                    
                 }
-            
+        
                 _ => Some(Token::new(Tag::Invalid, self.offset..self.offset + char.len_utf8(), self.line)),
             }
         } else {
