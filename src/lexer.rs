@@ -4,7 +4,7 @@ use crate::token::{Tag, Token};
 
 pub struct Lexer<'a> {
     pub(crate) src: &'a str,
-    it: Peekable<CharIndices<'a>>,
+    it: CharIndices<'a>,
     /// Most recently returned item from `it`
     prev: (usize, char),
     line: u32
@@ -22,7 +22,7 @@ impl<'a> Lexer<'a> {
     pub fn from(src: &'a str) -> Self {
         let mut lexer = Self {
             src: src,
-            it: src.char_indices().peekable(),
+            it: src.char_indices(),
             prev: (0, '\x00'),
             line: 1
         };
@@ -38,14 +38,14 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn peek(&mut self) -> Option<&(usize, char)> {
-        self.it.peek()
+    fn peek(&mut self) -> Option<(usize, char)> {
+        self.it.clone().next()
     }
 
     fn dual_op(&mut self, next_char: char, tag: Tag, matched_tag: Tag) -> Token<'a> {
         let start = self.prev.0;
         match self.peek() {
-            Some(&(_, char)) if char == next_char => {
+            Some((_, char)) if char == next_char => {
                 self.advance();
                 Token::new(matched_tag, &self.src[start..start + 2], start, self.line)
             },
@@ -68,7 +68,7 @@ impl<'a> Lexer<'a> {
                     self.line += 1;
                 }
                 '\\' => {
-                    if matches!(self.peek(), Some(&(_, '\\' | '"'))) {
+                    if matches!(self.peek(), Some((_, '\\' | '"'))) {
                         self.advance();
                     }
                     
@@ -97,7 +97,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_ident(&mut self) {
-        while let Some(&(_, char)) = self.peek() {
+        while let Some((_, char)) = self.peek() {
             if char.is_alphabetic() || char == '_'  { let _ = self.advance(); }
             else { break; }
         }
