@@ -1,6 +1,7 @@
 use std::ops::Range;
+use serde::Serialize;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Tag {
     // Operators
     Plus, PlusEqual,
@@ -38,6 +39,8 @@ pub enum Tag {
     While,
     For,
     Let,
+
+    Eof,
     
 
     Invalid
@@ -49,6 +52,14 @@ pub struct Token<'s> {
     pub pos: usize,
     pub value: &'s str,
     pub line: u32
+}
+
+impl Serialize for Token<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer {
+        serializer.serialize_str(self.value)
+    }
 }
 
 

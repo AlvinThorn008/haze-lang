@@ -1,3 +1,42 @@
+Statement = FnDecl
+            | VarDecl
+            | ExprStmt
+            | ';' ;
+
+FnDecl = "fn" ident '(' FnParams ')' BlockStmt ;
+FnParams = ident (',' ident)* ','? ;
+
+VarDecl = "let" ident ( "=" Expr )? ";" ;
+
+ExprStmt = ExprMaybeSemi ';'? | ExprNoSemi ';' ;
+
+Expr = ExprMaybeSemi | ExprNoSemi ;
+
+ExprMaybeSemi = IfExpr
+                | WhileExpr
+                | ReturnExpr
+                | BlockExpr ;
+
+ExprNoSemi = ident 
+            | string
+            | bool
+            | number ;
+
+InfixExpr = Expr BinOp Expr ;
+BinOp = '+' | '-' | '/' | '*' | "==" | '>' | ">=" | '<' | "<=" | "!=" ;
+
+PrefixExpr = UnaryOp Expr ;
+UnaryOp = '-' | '!' ;
+
+GroupExpr = '(' Expr? ')' ;
+
+IfExpr = "if" Expr BlockExpr ( "else"? ( IfExpr | BlockExpr ) )? ;
+WhileExpr = "while" Expr BlockExpr ;
+ReturnExpr = "return" Expr? ;
+
+BlockStmt = BlockExpr ;
+BlockExpr = '{' Statement* '}' ;
+
 use crate::lexer::Lexer;
 use crate::token::{Tag, Token};
 // use crate::ast::*;
@@ -377,3 +416,10 @@ mod expr {
         }
     }
 }
+
+
+
+
+
+
+

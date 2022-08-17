@@ -2,6 +2,7 @@ use std::{iter::{Peekable}, str::CharIndices, ops::Range, fmt, error::Error, };
 
 use crate::token::{Tag, Token};
 
+#[derive(Clone)]
 pub struct Lexer<'a> {
     pub(crate) src: &'a str,
     it: CharIndices<'a>,
@@ -97,14 +98,22 @@ impl<'a> Lexer<'a> {
     fn lex_number(&mut self) -> Token<'a> {
         let start = self.prev.0;
 
-        // Redundant digit check 
-        // TODO: Revisit whether the redundant digit is ideal
-        while self.prev.1.is_ascii_digit() { 
-            self.advance();
+        loop {
+            match self.peek() {
+                Some((_, ch)) if ch.is_ascii_digit() => self.advance(),
+                _ => break
+            }
         }
 
+        // Redundant digit check 
+        // TODO: Revisit whether the redundant digit is ideal
+        // while self.prev.1.is_ascii_digit() { 
+        //     self.advance();
+        // }
+
         // so the length of the last char needn't be added
-        Token::new(Tag::Number, &self.src[start..self.prev.0], start, self.line)
+        let end = self.prev.0 + self.prev.1.len_utf8();
+        Token::new(Tag::Number, &self.src[start..end], start, self.line)
     }
 
     fn lex_ident(&mut self) -> Token<'a> {
@@ -152,7 +161,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn done(&self) -> bool {
-        self.prev.0 >= self.src.len() - 1
+        self.prev.0 >= self.src.len()
     }
 
     fn next_token(&mut self) -> Option<Token<'a>> {
@@ -170,6 +179,7 @@ impl<'a> Lexer<'a> {
 
             '.' => Some(Token::new(Tag::Dot, &self.src[start..start + 1], start, self.line)),
             ',' => Some(Token::new(Tag::Comma, &self.src[start..start + 1], start, self.line)),
+            ';' => Some(Token::new(Tag::Semicolon, &self.src[start..start + 1], start, self.line)),
 
             '!' => Some(self.dual_op('=', Tag::Bang, Tag::BangEqual)),
             '=' => Some(self.dual_op('=', Tag::Equal, Tag::EqualEqual)),
@@ -225,4 +235,5 @@ impl fmt::Display for StringError {
 }
 
 impl Error for StringError {}
+
 
