@@ -1,9 +1,24 @@
 use crate::lexer::Lexer;
 use crate::token::{Tag, Token};
-// use crate::ast::*;
 use crate::ast::*;
 use crate::bumping::{Vec, Box};
 use bumpalo::Bump;
+
+/// Advance the lexer and return the expr
+macro_rules! next_and_return {
+    ($parser:ident, $exp:expr) => {{
+        let result = $exp;
+        $parser.next();
+        result
+    }};
+}
+
+/// Advance the lexer without calling next
+macro_rules! commit {
+    ($parser:ident, $tok:ident) => {
+        $parser.tokens.offset += $tok.value.len() as u32
+    };
+}
 
 /// The Haze Parser
 /// 
@@ -18,7 +33,16 @@ pub struct Parser<'a, 'bump> {
 pub type Program<'a, 'bump> = Vec<'bump, Node<'a, 'bump>>;
 
 impl<'a, 'bump> Parser<'a, 'bump> {
-    /// Constructs a new parser given a source string 
+    /// Constructs a new parser given a source string
+    /// 
+    /// # Examples
+    /// ```
+    /// let bump = bumpalo::Bump::new();
+    /// let mut parser = Parser::new("
+    /// let g = 1 * 2 + 5;
+    /// ", &bump);
+    /// let tree = parser.parse();
+    /// ```
     pub fn new(source: &'a str, allocator: &'bump Bump) -> Self {
         Self {
             tokens: Lexer::from(source),
@@ -26,6 +50,7 @@ impl<'a, 'bump> Parser<'a, 'bump> {
         }
     }
 
+    /// Produces a AST 
     pub fn parse(&mut self) -> Result<Program<'a, 'bump>, &'static str> {
         let mut program = Program::new_in(self.bump);
 
@@ -43,7 +68,7 @@ impl<'a, 'bump> Parser<'a, 'bump> {
         match tok.tag {
             Tag::Fn => Ok(Stmt::FuncDecl(Box::new_in(self.bump, self.parse_func_decl()?))),
             Tag::Let => Ok(Stmt::VarDecl(Box::new_in(self.bump, self.parse_var_decl()?))),
-            Tag::Semicolon => self.next_after(Ok(Stmt::Empty(EmptyStmt(tok)))),
+            Tag::Semicolon => next_and_return!(self, Ok(Stmt::Empty(EmptyStmt(tok)))),
             _ => Ok(Stmt::Expr(self.parse_expr_stmt()?)),
         }
     }
@@ -244,6 +269,9 @@ impl<'a, 'bump> Parser<'a, 'bump> {
         }
     }
 
+    // fn parse_break_expr(&mut self) -> Result<BreakStmt>
+
+    // Core expression parser based on Pratt parsing
     fn parse_expr_bp(&mut self, min_bp: u8) -> Result<Expr<'a, 'bump>, &'static str> {
         let mut lhs = self.parse_prefix()?;
 
@@ -274,10 +302,17 @@ impl<'a, 'bump> Parser<'a, 'bump> {
     fn parse_prefix(&mut self) -> Result<Expr<'a, 'bump>, &'static str> {
         let tok = self.peek().expect("self.tokens should not be consumed");
         match tok.tag {
-            Tag::Ident => self.next_after(Ok(Expr::Id(Ident(tok)))),
-            Tag::String { .. } => self.next_after(Ok(Expr::Str(Str(tok)))),
-            Tag::Bool => self.next_after(Ok(Expr::Bool(Bool(tok)))),
-            Tag::Number => self.next_after(Ok(Expr::Int(Int(tok)))),
+            Tag::Ident => {
+                self.next(); // ident
+
+                Ok(match self.eat_token(Tag::Equal) {
+                    Some(_) => Expr::Assign(Box::new_in(self.bump, AssignExpr { ident: Ident(tok), value: self.parse_expr()? })),
+                    None => Expr::Id(Ident(tok))
+                })
+            },
+            Tag::String => next_and_return!(self, Ok(Expr::Str(Str(tok)))),
+            Tag::Bool => next_and_return!(self, Ok(Expr::Bool(Bool(tok)))),
+            Tag::Number => next_and_return!(self, Ok(Expr::Int(Int(tok)))),
             tag if tag_is_unaryop(tag) => {
                 self.next();
                 let ((), _r_bp) = expr::prefix_bp(tag);
@@ -313,20 +348,8 @@ impl<'a, 'bump> Parser<'a, 'bump> {
         };
     }
 
-    fn peek(&mut self) -> Option<Token<'a>> {
+    fn peek(& self) -> Option<Token<'a>> {
         self.tokens.clone().next()
-    }
-
-    fn next_after<T>(&mut self, value: T) -> T {
-        let result = value;
-        self.next();
-        result
-    }
-
-    fn lazy_next_after<T>(&mut self, func: impl FnOnce(&mut Self) -> T) -> T {
-        let result = func(self);
-        self.next();
-        result
     }
 
     fn eat_token(&mut self, token_tag: Tag) -> Option<Token<'a>> {
@@ -376,4 +399,50 @@ mod expr {
             _ => panic!("tag should be an unary operator"),
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    extern crate test;
+
+    use super::{Parser, Bump};
+
+    const WHOLE_SOURCE: &str = r#"let PI = 3.14;
+
+    fn area_circle(radius) {
+        return PI * radius * radius;
+    }
+    
+    let radius = int(input("What is the radius"));
+    print(area_circle(radius));
+    
+    let students = [];
+    
+    while true {
+        print("Enter student record");
+        let name = input("Student Name: ");
+        let age = int(input("Student Age: "));
+        let class = input("Student's class");
+    
+    
+        if age > 18 {
+            return print("This person is too old");
+        }
+        if class.len() > 3 { return print("Invalid class name"); }
+    
+        students.push((name, age, class));
+    
+        if input("Exit? ") {
+            return print("Exiting record system")
+        }
+    }"#;
+
+    // fn bench_parser(b: &mut test::Bencher) {
+    //     let bump = Bump::new();
+    //     let parser = Parser::new("", &bump);
+
+    //     b.bench(|| {
+            
+    //     })
+    // }
 }

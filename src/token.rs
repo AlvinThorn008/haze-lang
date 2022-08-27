@@ -10,6 +10,7 @@ pub enum Tag {
     Asterisk, AsteriskEqual,
     
     Dot,
+    DotDot, // Range
     Bang, BangEqual,
     Equal, EqualEqual,
     Greater, GreaterEqual,
@@ -23,11 +24,12 @@ pub enum Tag {
     LBracket,
     RBracket,
     Semicolon,
+    Colon,
     Comma,
 
     // Literals
     Ident,
-    String { closed: bool },
+    String,
     Bool,
     Number,
 
@@ -39,17 +41,17 @@ pub enum Tag {
     While,
     For,
     Let,
+    Break,
+    Continue,
 
-    Eof,
-    
-
+    UnexpectedEof,
     Invalid
 }
 
 #[derive(Debug, Clone)]
 pub struct Token<'s> {
     pub tag: Tag,
-    pub pos: usize,
+    pub pos: u32,
     pub value: &'s str,
     pub line: u32
 }
@@ -65,7 +67,7 @@ impl Serialize for Token<'_> {
 
 
 impl<'s> Token<'s> {
-    pub fn new(tag: Tag, value: &'s str, pos: usize, line: u32) -> Self {
+    pub fn new(tag: Tag, value: &'s str, pos: u32, line: u32) -> Self {
         Self {
             tag,
             value,

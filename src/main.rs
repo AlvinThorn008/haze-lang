@@ -1,4 +1,5 @@
 #![allow(warnings)]
+#![feature(test)]
 
 use std::str::CharIndices;
 
@@ -42,27 +43,25 @@ pub mod bumping;
 
  */
 
+const WHOLE_SOURCE: &str = r#"
+let PI = 3.14;
+
+
+"#;
+
 fn main() {
     use bumpalo::Bump;
 
-    // println!("{}", std::mem::size_of::<crate::ast::Node<'_, '_>>());
-
-    // return;
-
     let bump = Bump::new();
 
-    let mut parser = Parser::new("
-    fn drake(name, hate, bit) {
-        let h = \"Hi world!\";
-
-        {
-            let g = 45;
-            g + 5;
-        }
-    }
-    ", &bump);
+    let mut parser = Parser::new(WHOLE_SOURCE, &bump);
 
     let tree = parser.parse();
+
+    let mut h = 3;
+    let mut d = 3;
+
+    let mut f = d = 3;
 
     match tree {
         Ok(ast) => {
@@ -70,9 +69,16 @@ fn main() {
             println!("{}", json_tree);
         }
         Err(err) => {
-            return ()
+            eprintln!("{}", err);
         }
     }
 
+}
 
+fn d(a: bool) -> i32 {
+    if a {
+        return 3
+    } else {
+        return 2
+    }
 }

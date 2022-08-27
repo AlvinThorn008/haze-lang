@@ -34,7 +34,7 @@ pub fn tag_is_unaryop(tag: Tag) -> bool {
 
 pub fn tag_is_literal(tag: Tag) -> bool {
     match tag {
-        Tag::Ident | Tag::String { closed: true } | Tag::Number | Tag::Bool => true,
+        Tag::Ident | Tag::String | Tag::Number | Tag::Bool => true,
         _ => false,
     }
 }
@@ -44,6 +44,7 @@ pub enum Node<'a, 'bump> {
     VarDecl(Box<'bump, VarDecl<'a, 'bump>>),
     FuncDecl(Box<'bump, FuncDecl<'a, 'bump>>),
     BlockStmt(BlockStmt<'a, 'bump>),
+    #[serde(rename = "ExprStmt")]
     Expr(ExprStmt<'a, 'bump>),
     EmptyStmt(EmptyStmt<'a>),
 
@@ -58,6 +59,7 @@ pub enum Node<'a, 'bump> {
     If(Box<'bump, IfExpr<'a, 'bump>>),
     While(Box<'bump, WhileExpr<'a, 'bump>>),
     Return(Box<'bump, ReturnExpr<'a, 'bump>>),
+    Assign(Box<'bump, AssignExpr<'a, 'bump>>)
 }
 
 #[derive(Debug, Serialize)]
@@ -83,6 +85,7 @@ pub enum Expr<'a, 'bump> {
     If(Box<'bump, IfExpr<'a, 'bump>>),
     While(Box<'bump, WhileExpr<'a, 'bump>>),
     Return(Box<'bump, ReturnExpr<'a, 'bump>>),
+    Assign(Box<'bump, AssignExpr<'a, 'bump>>)
 }
 
 impl Serialize for Expr<'_, '_> {
@@ -101,6 +104,7 @@ impl Serialize for Expr<'_, '_> {
             Expr::If(node) => serializer.serialize_newtype_variant("", 8, "If", node),
             Expr::While(node) => serializer.serialize_newtype_variant("", 9, "While", node),
             Expr::Return(node) => serializer.serialize_newtype_variant("", 10, "Return", node),
+            Expr::Assign(node) => serializer.serialize_newtype_variant("", 10, "Assign", node),
         }
     }
 }
@@ -120,6 +124,7 @@ impl<'a, 'bump> From<Expr<'a, 'bump>> for Node<'a,'bump> {
             If(inner) => Self::If(inner),
             While(inner) => Self::While(inner),
             Return(inner) => Self::Return(inner),
+            Assign(inner) => Self::Assign(inner)
         }
     }
 }
@@ -184,6 +189,12 @@ pub struct WhileExpr<'a, 'bump> {
 #[derive(Debug, Serialize)]
 pub struct ReturnExpr<'a, 'bump> {
     pub value: Option<Expr<'a, 'bump>>,
+}
+
+#[derive(Debug, Serialize)] 
+pub struct AssignExpr<'a, 'bump> {
+    pub ident: Ident<'a>,
+    pub value: Expr<'a, 'bump>
 }
 
 #[derive(Debug, Serialize)]
