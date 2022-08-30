@@ -1,3 +1,7 @@
+use std::cell::{OnceCell, LazyCell};
+use std::iter::StepBy;
+use std::ops::ControlFlow;
+
 use crate::lexer::Lexer;
 use crate::token::{Tag, Token};
 use crate::ast::*;
@@ -7,9 +11,8 @@ use bumpalo::Bump;
 /// Advance the lexer and return the expr
 macro_rules! next_and_return {
     ($parser:ident, $exp:expr) => {{
-        let result = $exp;
         $parser.next();
-        result
+        $exp
     }};
 }
 
@@ -32,6 +35,8 @@ pub struct Parser<'a, 'bump> {
 
 pub type Program<'a, 'bump> = Vec<'bump, Node<'a, 'bump>>;
 
+type PostfixHandler = for<'a, 'bump> fn(&mut Parser<'a, 'bump>) -> Result<Expr<'a, 'bump>, &'static str>;
+
 impl<'a, 'bump> Parser<'a, 'bump> {
     /// Constructs a new parser given a source string
     /// 
@@ -53,16 +58,99 @@ impl<'a, 'bump> Parser<'a, 'bump> {
     /// Produces a AST 
     pub fn parse(&mut self) -> Result<Program<'a, 'bump>, &'static str> {
         let mut program = Program::new_in(self.bump);
-
-        while let Some(t) = self.peek() {
-            let stmt = self.parse_statement().map(Into::<Node>::into)?;
-            program.0.push(stmt);
-        }
-
-        return Ok(program);
+        match self.parse_expr(0) {
+            Ok(expr) => program.0.push(expr.into()),
+            Err(err) => return Err(err)
+        };
+        Ok(program)
     }
 
-    fn parse_statement(&mut self) -> Result<Stmt<'a, 'bump>, &'static str> {
+    fn parse_expr(&mut self, min_bp: u8) -> Result<Expr<'a, 'bump>, &'static str> {
+        let mut lhs = self.parse_prefix()?;
+
+        loop {
+            let op = match self.peek() {
+                Some(tok) => tok,
+                _ => break
+            };
+
+            let rhs = match self.parse_postfix(op.tag) {
+                Some((l_bp, rhs)) => {
+                    if l_bp < min_bp { break; }
+                    self.next();
+                    rhs(self)?
+                }
+                None => {
+                    break
+                }
+            };
+
+            lhs = Expr::Infix(Box::new_in(self.bump, Infix {
+                left: lhs,
+                op,
+                right: rhs
+            }));
+        }
+        Ok(lhs)
+        
+    }
+
+    fn parse_postfix(&mut self, tag: Tag) -> Option<(u8, PostfixHandler)> {
+
+        macro_rules! infix_expr {
+            ($self:ident,$bp:literal) => {{
+                ($bp, |self_| { self_.parse_expr($bp + 1) })
+            }};
+        }
+
+        macro_rules! postfix_expr {
+            ($bp:literal,$closure:expr) => {
+                ($bp, $closure)
+            };
+        }
+
+        match tag {
+            Tag::Minus | Tag::Plus => Some(infix_expr!(self, 1)),
+            Tag::Slash | Tag::Asterisk => Some(infix_expr!(self, 3)),
+            Tag::BangEqual
+            | Tag::Greater
+            | Tag::GreaterEqual
+            | Tag::Less
+            | Tag::LessEqual
+            | Tag::EqualEqual => Some(infix_expr!(self, 5)),
+            _ => None
+        }
+    }
+
+    fn parse_prefix(&mut self) -> Result<Expr<'a, 'bump>, &'static str> {
+        let tok = self.peek().unwrap();
+
+        match tok.tag {
+            Tag::Ident => next_and_return!(self, Ok(Expr::Id(Ident(tok)))),
+            Tag::String => next_and_return!(self, Ok(Expr::Str(Str(tok)))),
+            Tag::Bool => next_and_return!(self, Ok(Expr::Bool(Bool(tok)))),
+            Tag::Number => next_and_return!(self, Ok(Expr::Int(Int(tok)))),
+            tag if tag_is_unaryop(tag) => {
+                self.next();
+                let ((), _r_bp) = expr::prefix_bp(tag);
+                let rhs = self.parse_expr(0)?;
+                Ok(Expr::Prefix(Box::new_in(self.bump, Prefix {
+                    op: tok,
+                    right: rhs,
+                })))
+            }
+            Tag::LParen => {
+                self.next();
+                let lhs = self.parse_expr(0)?;
+                self.eat_token(Tag::RParen)
+                    .ok_or("Missing closing parenthesis")?;
+                Ok(Expr::Group(Box::new_in(self.bump, Group(lhs))))
+            }
+            _ => Err("Expected expression in parse_prefix")
+        }
+    }
+
+/*     fn parse_statement(&mut self) -> Result<Stmt<'a, 'bump>, &'static str> {
         let tok = self.peek().expect("self.tokens shouldn't be consumed");
 
         match tok.tag {
@@ -337,7 +425,7 @@ impl<'a, 'bump> Parser<'a, 'bump> {
                 return Err("Expected expression")
             }
         }
-    }
+    } */
 
     pub fn lazy_eat(&mut self, tag: Tag) {
         match self.peek() {

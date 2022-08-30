@@ -1,5 +1,6 @@
 #![allow(warnings)]
 #![feature(test)]
+#![feature(once_cell)]
 
 use std::str::CharIndices;
 
@@ -44,9 +45,7 @@ pub mod bumping;
  */
 
 const WHOLE_SOURCE: &str = r#"
-let PI = 3.14;
-
-
+34 * 446 + 23
 "#;
 
 fn main() {
