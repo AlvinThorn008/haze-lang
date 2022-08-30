@@ -148,9 +148,14 @@ impl<'a, 'bump> Parser<'a, 'bump> {
     }
 
     fn parse_expr_stmt(&mut self) -> Result<ExprStmt<'a, 'bump>, &'static str> {
-        let tok = self.peek().expect("self.tokens shouldn't be consumed");
+        let expr = self.parse_expr()?;
+        match expr {
+            Expr::If(_) | Expr::While(_) | Expr::Block(_) => self.lazy_eat(Tag::Semicolon),
+            _ => { self.eat_token(Tag::Semicolon).ok_or("Expected semicolon after expression without block")?; }
+        };
+        Ok(ExprStmt { expr })
 
-        let expr = match tok.tag {
+        /* let expr = match tok.tag {
             Tag::If => {
                 let exp = Expr::If(Box::new_in(self.bump, self.parse_if_expr()?));
                 self.lazy_eat(Tag::Semicolon);
@@ -172,7 +177,7 @@ impl<'a, 'bump> Parser<'a, 'bump> {
                 exp
             }
         };
-        Ok(ExprStmt { expr })
+        Ok(ExprStmt { expr }) */
     }
 
     fn parse_block_stmt(&mut self) -> Result<BlockStmt<'a, 'bump>, &'static str> {

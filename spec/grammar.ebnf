@@ -16,7 +16,6 @@ Expr = ExprMaybeSemi | ExprNoSemi ;
 # Expressions that are optionally terminated by a semicolon to form an expression statement
 ExprMaybeSemi = IfExpr
                 | WhileExpr
-                | ReturnExpr
                 | BlockExpr ;
 
 # Expressions that must be terminated by a semicolon to form an expression statement
@@ -26,7 +25,8 @@ ExprSemi = ident
             | number
             | InfixExpr
             | PrefixExpr
-            | GroupExpr ;
+            | GroupExpr 
+            | ReturnExpr ;
 
 InfixExpr = Expr BinOp Expr ;
 BinOp = '+' | '-' | '/' | '*' | "==" | '>' | ">=" | '<' | "<=" | "!=" | "=" ;

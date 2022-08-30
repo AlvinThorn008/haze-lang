@@ -46,6 +46,8 @@ pub mod bumping;
 const WHOLE_SOURCE: &str = r#"
 let PI = 3.14;
 
+if a { return 3; } else { return 4; } * 4;
+
 
 "#;
 
