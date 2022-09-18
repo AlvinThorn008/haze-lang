@@ -11,6 +11,7 @@ pub mod utils;
 pub mod ast;
 pub mod parser;
 pub mod bumping;
+pub mod errors;
 
 /* fn main() {
     let mut tokens = lexer::Lexer::from(r#"京""910 + 56 * ("hello楽")"
@@ -44,10 +45,7 @@ pub mod bumping;
  */
 
 const WHOLE_SOURCE: &str = r#"
-let PI = 3.14;
-
-if a { return 3; } else { return 4; } * 4;
-
+fn a(par, par2, par3) { return "$par $par2 $par3"; }
 
 "#;
 
@@ -60,11 +58,6 @@ fn main() {
 
     let tree = parser.parse();
 
-    let mut h = 3;
-    let mut d = 3;
-
-    let mut f = d = 3;
-
     match tree {
         Ok(ast) => {
             let json_tree = serde_json::to_string(&ast).unwrap();
@@ -75,12 +68,4 @@ fn main() {
         }
     }
 
-}
-
-fn d(a: bool) -> i32 {
-    if a {
-        return 3
-    } else {
-        return 2
-    }
 }

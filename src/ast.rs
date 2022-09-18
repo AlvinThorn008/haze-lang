@@ -59,7 +59,15 @@ pub enum Node<'a, 'bump> {
     If(Box<'bump, IfExpr<'a, 'bump>>),
     While(Box<'bump, WhileExpr<'a, 'bump>>),
     Return(Box<'bump, ReturnExpr<'a, 'bump>>),
-    Assign(Box<'bump, AssignExpr<'a, 'bump>>)
+    Assign(Box<'bump, AssignExpr<'a, 'bump>>),
+    Call(Box<'bump, CallExpr<'a, 'bump>>),
+    Array(Box<'bump, ArrayExpr<'a, 'bump>>),
+    Break(Box<'bump, BreakExpr<'a, 'bump>>),
+}
+
+#[derive(Debug, Serialize)]
+pub enum Item<'a, 'bump> {
+    FuncDecl(Box<'bump, FuncDecl<'a, 'bump>>)
 }
 
 #[derive(Debug, Serialize)]
@@ -85,7 +93,10 @@ pub enum Expr<'a, 'bump> {
     If(Box<'bump, IfExpr<'a, 'bump>>),
     While(Box<'bump, WhileExpr<'a, 'bump>>),
     Return(Box<'bump, ReturnExpr<'a, 'bump>>),
-    Assign(Box<'bump, AssignExpr<'a, 'bump>>)
+    Assign(Box<'bump, AssignExpr<'a, 'bump>>),
+    Call(Box<'bump, CallExpr<'a, 'bump>>),
+    Array(Box<'bump, ArrayExpr<'a, 'bump>>),
+    Break(Box<'bump, BreakExpr<'a, 'bump>>)
 }
 
 impl Serialize for Expr<'_, '_> {
@@ -105,6 +116,9 @@ impl Serialize for Expr<'_, '_> {
             Expr::While(node) => serializer.serialize_newtype_variant("", 9, "While", node),
             Expr::Return(node) => serializer.serialize_newtype_variant("", 10, "Return", node),
             Expr::Assign(node) => serializer.serialize_newtype_variant("", 10, "Assign", node),
+            Expr::Call(node) => serializer.serialize_newtype_variant("", 10, "Call", node),
+            Expr::Array(node) => serializer.serialize_newtype_variant("", 10, "Array", node),
+            Expr::Break(node) => serializer.serialize_newtype_variant("", 10, "Break", node),
         }
     }
 }
@@ -124,7 +138,10 @@ impl<'a, 'bump> From<Expr<'a, 'bump>> for Node<'a,'bump> {
             If(inner) => Self::If(inner),
             While(inner) => Self::While(inner),
             Return(inner) => Self::Return(inner),
-            Assign(inner) => Self::Assign(inner)
+            Assign(inner) => Self::Assign(inner),
+            Call(inner) => Self::Call(inner),
+            Array(inner) => Self::Array(inner),
+            Break(inner) => Self::Break(inner)
         }
     }
 }
@@ -138,6 +155,24 @@ impl<'a, 'bump> From<Stmt<'a, 'bump>> for Node<'a, 'bump> {
             Block(inner) => Self::BlockStmt(inner),
             Expr(inner) => Self::Expr(inner),
             Empty(inner) => Self::EmptyStmt(inner)
+        }
+    }
+}
+
+impl<'a, 'bump> From<Item<'a, 'bump>> for Node<'a, 'bump> {
+    fn from(item: Item<'a, 'bump>) -> Self {
+        use Item::*;
+        match item {
+            FuncDecl(inner) => Self::FuncDecl(inner)
+        }
+    }
+}
+
+impl<'a, 'bump> From<Item<'a, 'bump>> for Stmt<'a, 'bump> {
+    fn from(item: Item<'a, 'bump>) -> Self {
+        use Item::*;
+        match item {
+            FuncDecl(inner) => Self::FuncDecl(inner)
         }
     }
 }
@@ -190,13 +225,24 @@ pub struct WhileExpr<'a, 'bump> {
 pub struct ReturnExpr<'a, 'bump> {
     pub value: Option<Expr<'a, 'bump>>,
 }
-
 #[derive(Debug, Serialize)] 
 pub struct AssignExpr<'a, 'bump> {
     pub ident: Ident<'a>,
     pub value: Expr<'a, 'bump>
 }
-
+#[derive(Debug, Serialize)] 
+pub struct CallExpr<'a, 'bump> {
+    pub name: Ident<'a>,
+    pub args: Vec<'bump, Expr<'a, 'bump>>,
+}
+#[derive(Debug, Serialize)]
+pub struct ArrayExpr<'a, 'bump> {
+    pub items: Vec<'bump, Expr<'a, 'bump>>
+}
+#[derive(Debug, Serialize)]
+pub struct BreakExpr<'a, 'bump> {
+    pub value: Option<Expr<'a, 'bump>>,
+}
 #[derive(Debug, Serialize)]
 pub struct FuncDecl<'a, 'bump> {
     pub name: Ident<'a>,
@@ -217,10 +263,6 @@ pub struct VarDecl<'a, 'bump> {
 #[serde(transparent)]
 pub struct ExprStmt<'a, 'bump> {
     pub expr: Expr<'a, 'bump>,
-}
-#[derive(Debug, Serialize)]
-pub struct BreakStmt<'a, 'bump> {
-    pub value: Option<Expr<'a, 'bump>>,
 }
 #[derive(Debug, Serialize)]
 pub struct EmptyStmt<'a>(pub Token<'a>);

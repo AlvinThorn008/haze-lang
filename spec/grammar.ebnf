@@ -1,4 +1,6 @@
-Statement = FnDecl
+Item = FnDecl
+
+Statement = Item
             | VarDecl
             | ExprStmt
             | ';' ;

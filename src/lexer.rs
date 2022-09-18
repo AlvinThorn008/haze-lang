@@ -1,4 +1,4 @@
-use std::{iter::{Peekable}, str::CharIndices, ops::Range, fmt, error::Error, };
+use std::{iter::Peekable, str::CharIndices, ops::Range, fmt, error::Error, };
 
 use crate::token::{Tag, Token};
 
@@ -191,7 +191,7 @@ impl<'a> Lexer<'a> {
     /// Consume a byte out of the source
     ///
     /// This method is mostly used to advance over ASCII characters after
-    /// peeking them. This is much faster than calling `self.next_ch` which tries 
+    /// peeking them. This is a bit faster than calling `self.next_ch` which tries 
     /// to advance by the next codepoint's length.
     fn bump(&mut self) {
         self.offset += 1;
@@ -237,7 +237,7 @@ impl<'a> Lexer<'a> {
     }
 
     // Consume next char in the source
-    #[inline] // <--- A man can dream 
+    #[inline] // A man can dream 
     pub(crate) fn next_ch(&mut self) -> Option<(u32, char)> {
         unsafe {
             // SAFETY: `self.offset` is always a char offset 

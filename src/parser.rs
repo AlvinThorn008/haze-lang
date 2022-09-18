@@ -7,9 +7,8 @@ use bumpalo::Bump;
 /// Advance the lexer and return the expr
 macro_rules! next_and_return {
     ($parser:ident, $exp:expr) => {{
-        let result = $exp;
         $parser.next();
-        result
+        $exp
     }};
 }
 
@@ -31,6 +30,7 @@ pub struct Parser<'a, 'bump> {
 }
 
 pub type Program<'a, 'bump> = Vec<'bump, Node<'a, 'bump>>;
+type InfixParser = for<'a, 'bump> fn(&mut Parser<'a, 'bump>) -> Result<Expr<'a, 'bump>, &'static str>;
 
 impl<'a, 'bump> Parser<'a, 'bump> {
     /// Constructs a new parser given a source string
@@ -55,8 +55,8 @@ impl<'a, 'bump> Parser<'a, 'bump> {
         let mut program = Program::new_in(self.bump);
 
         while let Some(t) = self.peek() {
-            let stmt = self.parse_statement().map(Into::<Node>::into)?;
-            program.0.push(stmt);
+            let item = self.parse_item().map(Into::<Node>::into)?;
+            program.0.push(item);
         }
 
         return Ok(program);
@@ -66,10 +66,19 @@ impl<'a, 'bump> Parser<'a, 'bump> {
         let tok = self.peek().expect("self.tokens shouldn't be consumed");
 
         match tok.tag {
-            Tag::Fn => Ok(Stmt::FuncDecl(Box::new_in(self.bump, self.parse_func_decl()?))),
+            Tag::Fn => self.parse_item().map(|item| item.into()),
             Tag::Let => Ok(Stmt::VarDecl(Box::new_in(self.bump, self.parse_var_decl()?))),
             Tag::Semicolon => next_and_return!(self, Ok(Stmt::Empty(EmptyStmt(tok)))),
             _ => Ok(Stmt::Expr(self.parse_expr_stmt()?)),
+        }
+    }
+
+    fn parse_item(&mut self) -> Result<Item<'a, 'bump>, &'static str> {
+        let tok = self.peek().expect("self.tokens shouldn't be consumed");
+
+        match tok.tag {
+            Tag::Fn => Ok(Item::FuncDecl(Box::new_in(self.bump, self.parse_func_decl()?))),
+            _ => Err("Not an item")
         }
     }
 
@@ -154,30 +163,6 @@ impl<'a, 'bump> Parser<'a, 'bump> {
             _ => { self.eat_token(Tag::Semicolon).ok_or("Expected semicolon after expression without block")?; }
         };
         Ok(ExprStmt { expr })
-
-        /* let expr = match tok.tag {
-            Tag::If => {
-                let exp = Expr::If(Box::new_in(self.bump, self.parse_if_expr()?));
-                self.lazy_eat(Tag::Semicolon);
-                exp
-            }
-            Tag::While => {
-                let exp = Expr::While(Box::new_in(self.bump, self.parse_while_expr()?));
-                self.lazy_eat(Tag::Semicolon);
-                exp
-            }
-            Tag::Return => {
-                let exp = Expr::Return(Box::new_in(self.bump, self.parse_return_expr()?));
-                self.lazy_eat(Tag::Semicolon);
-                exp
-            }
-            _ => {
-                let exp = self.parse_expr()?;
-                self.lazy_eat(Tag::Semicolon);
-                exp
-            }
-        };
-        Ok(ExprStmt { expr }) */
     }
 
     fn parse_block_stmt(&mut self) -> Result<BlockStmt<'a, 'bump>, &'static str> {
@@ -274,7 +259,19 @@ impl<'a, 'bump> Parser<'a, 'bump> {
         }
     }
 
-    // fn parse_break_expr(&mut self) -> Result<BreakStmt>
+    fn parse_break_expr(&mut self) -> Result<BreakExpr<'a, 'bump>, &'static str> {
+        let _ = self.next().expect("self.tokens shouldn't be consumed"); // consume return keyword
+
+        match self.peek() {
+            Some(tok) if matches!(tok.tag, Tag::Semicolon | Tag::RBrace) => {
+                Ok(BreakExpr { value: None })
+            }
+            Some(tok) => Ok(BreakExpr {
+                value: Some(self.parse_expr()?),
+            }),
+            None => Err("Expected `:`, `}` or an operator"),
+        }
+    }
 
     // Core expression parser based on Pratt parsing
     fn parse_expr_bp(&mut self, min_bp: u8) -> Result<Expr<'a, 'bump>, &'static str> {
@@ -304,16 +301,38 @@ impl<'a, 'bump> Parser<'a, 'bump> {
         Ok(lhs)
     }
 
+    fn parse_postfix(&mut self, tag: Tag) -> Option<(u8, InfixParser)> {
+
+        macro_rules! infix_expr {
+            ($self:ident,$bp:literal) => {{
+                ($bp, |self_| { self_.parse_expr_bp($bp + 1) })
+            }};
+        }
+
+        match tag {
+            Tag::Minus | Tag::Plus => Some(infix_expr!(self, 1)),
+            Tag::Slash | Tag::Asterisk => Some(infix_expr!(self, 3)),
+            Tag::BangEqual
+            | Tag::Greater
+            | Tag::GreaterEqual
+            | Tag::Less
+            | Tag::LessEqual
+            | Tag::EqualEqual => Some(infix_expr!(self, 5)),
+            _ => None
+        }
+    }
+
     fn parse_prefix(&mut self) -> Result<Expr<'a, 'bump>, &'static str> {
         let tok = self.peek().expect("self.tokens should not be consumed");
         match tok.tag {
             Tag::Ident => {
                 self.next(); // ident
-
-                Ok(match self.eat_token(Tag::Equal) {
-                    Some(_) => Expr::Assign(Box::new_in(self.bump, AssignExpr { ident: Ident(tok), value: self.parse_expr()? })),
-                    None => Expr::Id(Ident(tok))
-                })
+                let next_tok = if let Some(tok) = self.peek() { tok } else { return Ok(Expr::Id(Ident(tok))); };
+                match next_tok.tag {
+                    Tag::Equal => self.consume_assignment(tok),
+                    Tag::LParen => self.consume_call_expr(tok),
+                    _ => Ok(Expr::Id(Ident(tok)))
+                }
             },
             Tag::String => next_and_return!(self, Ok(Expr::Str(Str(tok)))),
             Tag::Bool => next_and_return!(self, Ok(Expr::Bool(Bool(tok)))),
@@ -334,14 +353,81 @@ impl<'a, 'bump> Parser<'a, 'bump> {
                     .ok_or("Missing closing parenthesis")?;
                 Ok(Expr::Group(Box::new_in(self.bump, Group(lhs))))
             }
+            Tag::LBracket => self.consume_array_expr(),
             Tag::If => Ok(Expr::If(Box::new_in(self.bump, self.parse_if_expr()?))),
             Tag::While => Ok(Expr::While(Box::new_in(self.bump, self.parse_while_expr()?))),
             Tag::Return => Ok(Expr::Return(Box::new_in(self.bump, self.parse_return_expr()?))),
             Tag::LBrace => Ok(Expr::Block(Box::new_in(self.bump, self.parse_block_expr()?))),
+            Tag::Break => Ok(Expr::Break(Box::new_in(self.bump, self.parse_break_expr()?))),
             _ => {
                 return Err("Expected expression")
             }
         }
+    }
+
+    fn consume_assignment(&mut self, tok: Token<'a>) -> Result<Expr<'a, 'bump>, &'static str> {
+        self.next();
+        Ok(Expr::Assign(Box::new_in(self.bump, AssignExpr { 
+            ident: Ident(tok), 
+            value: self.parse_expr()? 
+        })))
+    }
+
+    fn consume_call_expr(&mut self, tok: Token<'a>) -> Result<Expr<'a, 'bump>, &'static str> {
+        self.next(); // LParen
+        let mut args = Vec::new_in(self.bump);
+
+        while self.eat_token(Tag::RParen).is_none() {
+            let arg = match self.parse_expr() {
+                Ok(expr) => expr,
+                Err(_) => return Err("Expected Identifier or RParen")
+            };
+
+            args.0.push(arg);
+
+            match self.peek() {
+                Some(tok) if tok.tag == Tag::Comma => {
+                    self.next();
+                }
+                Some(tok) if tok.tag == Tag::RParen => {
+                    self.next();
+                    break;
+                }
+                _ => {}
+            }
+        }
+        Ok(Expr::Call(Box::new_in(self.bump, CallExpr { 
+            name: Ident(tok), 
+            args 
+        })))
+    }
+
+    fn consume_array_expr(&mut self) -> Result<Expr<'a, 'bump>, &'static str> {
+        self.next(); // LParen
+        let mut items = Vec::new_in(self.bump);
+
+        while self.eat_token(Tag::RBracket).is_none() {
+            let item = match self.parse_expr() {
+                Ok(expr) => expr,
+                Err(_) => return Err("Expected Identifier or RParen")
+            };
+
+            items.0.push(item);
+
+            match self.peek() {
+                Some(tok) if tok.tag == Tag::Comma => {
+                    self.next();
+                }
+                Some(tok) if tok.tag == Tag::RBracket => {
+                    self.next();
+                    break;
+                }
+                _ => {}
+            }
+        }
+        Ok(Expr::Array(Box::new_in(self.bump, ArrayExpr { 
+            items
+        })))
     }
 
     pub fn lazy_eat(&mut self, tag: Tag) {
@@ -359,21 +445,6 @@ impl<'a, 'bump> Parser<'a, 'bump> {
 
     fn eat_token(&mut self, token_tag: Tag) -> Option<Token<'a>> {
         (self.peek()?.tag == token_tag).then(|| self.tokens.next().unwrap())
-    }
-
-    fn eat_token_if(&mut self, predicate: impl FnOnce(Tag) -> bool) -> Option<Token<'a>> {
-        predicate(self.peek()?.tag).then(|| self.tokens.next().unwrap())
-    }
-
-    fn must_eat_token_if(
-        &mut self,
-        predicate: impl FnOnce(Tag) -> bool,
-    ) -> Option<Option<Token<'a>>> {
-        match self.peek() {
-            None => None,
-            Some(tok) if predicate(tok.tag) => Some(Some(self.tokens.next().unwrap())),
-            _ => Some(None),
-        }
     }
 
     fn next(&mut self) -> Option<Token<'a>> {

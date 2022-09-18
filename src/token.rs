@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{ops::Range, marker::PhantomData};
 use serde::Serialize;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -46,6 +46,24 @@ pub enum Tag {
 
     UnexpectedEof,
     Invalid
+}
+
+pub struct Span<'a, T: 'a> {
+    start: u32,
+    len: u32,
+    _marker: PhantomData<&'a T>
+}
+
+impl <'a> Span<'a, &'a str> {
+    fn new(start: u32, len: u32) -> Self {
+        Self { start, len, _marker: PhantomData }
+    }
+}
+
+impl<'a> From<Range<u32>> for Span<'a, &'a str> {
+    fn from(range: Range<u32>) -> Self {
+        Self { start: range.start, len: range.len() as u32, _marker: PhantomData }
+    }
 }
 
 #[derive(Debug, Clone)]
