@@ -309,6 +309,10 @@ impl<'a, 'bump> Parser<'a, 'bump> {
             }};
         }
 
+        // Notice how the binding powers are consecutive odd numbers. 
+        // This is because the right binding power of any infix operator is
+        // its left binding power plus 1. This prevents clashing.
+        // e.g. + and - have a left bp of 1 and a right bp of 2
         match tag {
             Tag::Minus | Tag::Plus => Some(infix_expr!(self, 1)),
             Tag::Slash | Tag::Asterisk => Some(infix_expr!(self, 3)),
