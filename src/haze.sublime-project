@@ -1,0 +1,22 @@
+{
+	"folders":
+	[
+		{
+			"path": "C:\\Users\\dubem\\Documents\\rust\\haze-lang",
+		},
+		{
+			"path": "C:\\Users\\dubem\\Documents\\js-scripts\\haze-prototype-parser"
+		},
+	],
+	"debugger_configurations":
+	[
+		{
+			"type": "lldb",
+			"request": "launch",
+			"name": "Launch",
+			"program": "${folder}/target/debug/haze-lang.exe",
+			"args": [],
+			"cwd": "${folder}",
+		},
+	],
+}
