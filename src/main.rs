@@ -44,37 +44,38 @@ pub mod errors;
 
  */
 
-const WHOLE_SOURCE: &str = r#"
 
+
+const WHOLE_SOURCE: &str = r#"
 let PI = 3.14;
 
-    fn area_circle(radius) {
-        return PI * radius * radius;
+fn area_circle(radius) {
+    return PI * radius * radius;
+}
+
+let radius = int(input("What is the radius"));
+print(area_circle(radius));
+
+let students = [];
+
+while true {
+    print("Enter student record");
+    let name = input("Student Name: ");
+    let age = int(input("Student Age: "));
+    let class = input("Student's class");
+
+
+    if age > 18 {
+        return print("This person is too old");
     }
-    
-    let radius = int(input("What is the radius"));
-    print(area_circle(radius));
-    
-    let students = [];
-    
-    while true {
-        print("Enter student record");
-        let name = input("Student Name: ");
-        let age = int(input("Student Age: "));
-        let class = input("Student's class");
-    
-    
-        if age > 18 {
-            return print("This person is too old");
-        }
-        if class.len() > 3 { return print("Invalid class name"); }
-    
-        students.push((name, age, class));
-    
-        if input("Exit? ") {
-            return print("Exiting record system")
-        }
+    if class.len() > 3 { return print("Invalid class name"); }
+
+    students.push((name, age, class));
+
+    if input("Exit? ") {
+        return print("Exiting record system")
     }
+}
 "#;
 
 fn main() {
@@ -82,7 +83,13 @@ fn main() {
 
     let bump = Bump::new();
 
-    let mut parser = Parser::new(WHOLE_SOURCE, &bump);
+    let mut parser = Parser::new(r#"
+fn print(message) {
+    let result = stdout.write(message);
+
+    if result { error("Core dumped"); }
+}
+"#, &bump);
 
     let tree = parser.parse();
 

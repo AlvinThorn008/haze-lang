@@ -1,17 +1,22 @@
 Item = FnDecl
+    | StructDecl
+    | ConstDecl
+    | EnumDecl ;
 
 Statement = Item
             | VarDecl
             | ExprStmt
             | ';' ;
 
-FnDecl = "fn" ident '(' FnParams ')' BlockStmt ;
+# Function declarations
+FnDecl = "fn" ident ParamList BlockStmt ;
+ParamList = '(' FnParams ')';
 FnParams = ident (',' ident)* ','? ;
 
+# Variable declarations
 VarDecl = "let" ident ( "=" Expr )? ";" ;
 
 ExprStmt = ExprMaybeSemi ';'? | ExprSemi ';' ;
-
 
 Expr = ExprMaybeSemi | ExprSemi ;
 

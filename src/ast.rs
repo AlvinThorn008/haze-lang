@@ -202,7 +202,7 @@ pub struct Prefix<'a, 'bump> {
 #[derive(Debug, Serialize)]
 #[serde(transparent)]
 pub struct BlockExpr<'a, 'bump> {
-    pub body: Vec<'bump, Stmt<'a, 'bump>>,
+    pub body: Box<'bump, [Stmt<'a, 'bump>]>,
 }
 #[derive(Debug, Serialize)]
 pub struct IfExpr<'a, 'bump> {

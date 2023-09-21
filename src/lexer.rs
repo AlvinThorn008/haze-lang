@@ -1,4 +1,4 @@
-use std::{iter::Peekable, str::CharIndices, ops::Range, fmt, error::Error, };
+use std::{iter::Peekable, str::CharIndices, ops::Range, fmt, error::Error};
 
 use crate::token::{Tag, Token};
 
