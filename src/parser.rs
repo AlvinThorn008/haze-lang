@@ -2,6 +2,7 @@ use crate::lexer::Lexer;
 use crate::token::{Tag, Token};
 use crate::ast::*;
 use crate::bumping::{Vec, Box};
+use crate::errors::*;
 use bumpalo::Bump;
 
 /// Advance the lexer and return the expr
@@ -26,7 +27,8 @@ pub struct Parser<'a, 'bump> {
     /// Token stream created from lexing a source file/string
     tokens: Lexer<'a>,
     /// backing allocator for node allocation
-    bump: &'bump Bump
+    bump: &'bump Bump,
+    errors: std::vec::Vec<ParseError>
 }
 
 pub type Program<'a, 'bump> = Vec<'bump, Node<'a, 'bump>>;
@@ -46,7 +48,8 @@ impl<'a, 'bump> Parser<'a, 'bump> {
     pub fn new(source: &'a str, allocator: &'bump Bump) -> Self {
         Self {
             tokens: Lexer::from(source),
-            bump: allocator
+            bump: allocator,
+            errors: std::vec::Vec::with_capacity(50)
         }
     }
 

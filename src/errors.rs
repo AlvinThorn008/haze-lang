@@ -1,8 +1,8 @@
-enum ParseErrorKind {
-    
+pub enum ParseErrorKind {
+    ExpectedSemi
 }
 
-struct Loc {
+pub struct Loc {
     start: u32,
     len: u32,
     line: u32
