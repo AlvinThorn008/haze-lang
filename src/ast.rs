@@ -252,7 +252,7 @@ pub struct FuncDecl<'a, 'bump> {
 #[derive(Debug, Serialize)]
 #[serde(transparent)]
 pub struct BlockStmt<'a, 'bump> {
-    pub body: Vec<'bump, Stmt<'a, 'bump>>,
+    pub body: Box<'bump, [Stmt<'a, 'bump>]>,
 }
 #[derive(Debug, Serialize)]
 pub struct VarDecl<'a, 'bump> {
