@@ -191,7 +191,7 @@ impl<'a, 'bump> Parser<'a, 'bump> {
             }
         }
 
-        Ok(BlockExpr { body: stmts })
+        Ok(BlockExpr { body: Box(stmts.0.into_boxed_slice()) })
     }
 
     fn parse_expr(&mut self) -> Result<Expr<'a, 'bump>, &'static str> {

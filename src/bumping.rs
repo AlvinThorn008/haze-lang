@@ -3,10 +3,10 @@ use bumpalo::{collections::Vec as VecBump, boxed::Box as BoxBump};
 
 #[derive(Debug)]
 #[repr(transparent)]
-pub struct Vec<'bump, T>(pub (crate)VecBump<'bump, T>);
+pub struct Vec<'bump, T: Sized>(pub (crate)VecBump<'bump, T>);
 #[derive(Debug)]
 #[repr(transparent)]
-pub struct Box<'bump, T>(pub (crate) BoxBump<'bump, T>);
+pub struct Box<'bump, T: ?Sized>(pub (crate) BoxBump<'bump, T>);
 
 impl<'bump, T> Vec<'bump, T> {
     #[inline]
@@ -22,6 +22,8 @@ impl<'bump, T> Box<'bump, T> {
     }
 }
 
+// impl<'bump, T: ?Sized> Box<'bump, T> {}
+
 use serde::Serialize;
 use serde::Serializer;
 
@@ -33,7 +35,7 @@ impl<T: Serialize> Serialize for Vec<'_, T> {
     }
 }
 
-impl<T: Serialize> Serialize for Box<'_, T> {
+impl<T: Serialize + ?Sized> Serialize for Box<'_, T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where
             S: Serializer {
