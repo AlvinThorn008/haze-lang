@@ -1,6 +1,6 @@
 use crate::token::{Tag, Token};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub enum ParseErrorKind {
     ExpectedSemi,
     ExpectedLBrace,
@@ -81,7 +81,8 @@ pub enum ParsingError {
     CouldRecover,
 
     /// A more local `Fatal`. For whenever one construct in a list is invalid, the entire list is invalid.
-    Terminal,
+    Terminal
+    
 
 
 }

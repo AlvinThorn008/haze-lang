@@ -10,16 +10,14 @@ pub mod lexer;
 pub mod token;
 pub mod utils;
 pub mod ast;
-mod ast2;
-// pub mod parser;
+pub mod ast;
+pub mod parser;
 pub mod bumping;
 pub mod errors;
-pub mod parser2;
-mod parser3;
-mod grammar;
-mod typecheck;
-mod visitor;
-mod codegen;
+
+pub mod grammar;
+pub mod typecheck;
+pub mod visitor;
 
 /* fn main() {
     let mut tokens = lexer::Lexer::from(r#"京""910 + 56 * ("hello楽")"

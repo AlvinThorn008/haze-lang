@@ -3,10 +3,29 @@ Item = FnDecl
     | ConstDecl
     | EnumDecl ;
 
-Statement = Item
-            | VarDecl
+Statement = VarDecl
             | ExprStmt
             | ';' ;
+
+Expression = ExpressionWithBlock
+            | ExpressionWithoutBlock;
+
+ExpressionWithoutBlock = LiteralExpression
+                        | InfixExpression
+                        | PrefixExpression
+                        | AssignmentExpression
+                        | GroupExpression
+                        | ArrayExpression
+                        | IndexExpression
+                        | StructExpression
+                        | CallExpression
+                        | ReturnExpression
+                        | BreakExpression
+                        | ContinueExpression ;
+
+ExpressionWithBlock = BlockExpression
+                    | LoopExpression
+                    | IfExpression ;
 
 # Function declarations
 FnDecl = "fn" ident ParamList BlockStmt ;

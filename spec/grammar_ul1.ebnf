@@ -1,0 +1,161 @@
+# Haze Grammar Definition
+# This file contains the format of valid syntactic structures in the
+# Haze language. 
+# 
+# However, definitions of lexical elements are not included.
+
+# Syntax
+# <Nonterminal> = <Rule> ;
+# Lexical elements(e.g. tokens) are always lowercase while nonterminals have their 
+# first letter capitalized.
+# Literals are enclosed by single or double quoutes.
+# 
+# ? - match 0 or 1 - Can be thought of as marking a node as optional
+# * - match 0 or more
+# + - match 1 or more
+
+# A program typically refers to a Haze file. It contains declarations of types such as structs,
+# enums and typealiases as well as functions.
+Program = TopLevelDeclaration* ;
+
+# Top level
+# TODO: Separate into Item nonterminal
+TopLevelDeclaration = 
+    | Module
+    | ImportDeclaration
+    | EnumDeclaration
+    | FunctionDeclaration
+    | StructDeclaration
+    | TypeAliasDeclaration
+    | ConstDeclaration ;
+
+Module = module ident '{' TopLevelDeclaration* '}' ;
+
+ImportDeclaration = import SymbolPathExpr ';' ;
+
+SymbolPathExpr = ident ('.' ident)* ;
+
+EnumDeclaration = enum ident '{' EnumVariants? '}' ;
+
+EnumVariants = EnumVariant (',' EnumVariant)* ;
+
+EnumVariant = ident (TupleVariant | StructVariant)? ;
+
+EnumVariantTuple = '(' TupleFields ')' ;
+
+EnumVariantStruct = '{' StructFields '}' ;
+
+FunctionDeclaration = fn ident '(' FunctionParams? ')' ('->' TypeExpr)? BlockExpr ;
+
+BlockExpr = '{' Statement* '}' ;
+
+FunctionParams = FunctionParam (',' FunctionParam)* ','? ;
+
+FunctionParam = ident ':' TypeExpr ;
+
+VariableDeclaration = let ident (':' TypeExpr)? ('=' Expr)? ';' ;
+
+StructDeclaration = Struct | TupleStruct ;
+
+Struct = struct ident '{' StructFields '}' ;
+
+TupleStruct = struct ident '(' TupleFields ')' ;
+
+StructFields = StructField (',' StructField)* ','? ;
+
+StructField = ident ':' TypeExpr ;
+
+TupleFields = TupleField (',' TupleField)* ','? ;
+
+TupleField = TypeExpr ;
+
+TypeAliasDeclaration = type ident '=' TypeExpr ';' ;
+
+ConstDeclaration = const ident ':' TypeExpr '=' Expr ';' ;
+
+Statement = 
+    | VariableDeclaration
+    | ExprStatement
+
+ExprStatement =
+    | ExprNoScope ';'
+    | ExprScoped ';'?
+
+Expr = ExprNoScope | ExprScoped ;
+    
+ExprNoScope =
+    | LiteralExpr
+    | SymbolPathExpr
+    | InfixExpr
+    | PrefixExpr
+    | ContinueExpr
+    | BreakExpr
+    | ReturnExpr
+    | GroupExpr
+    | ArrayExpr
+    | CallExpr
+    | IndexExpr
+    | FieldAccessExpr
+    | MethodCallExpr
+    | TupleExpr ;
+
+ExprScoped = 
+    | IfExpr
+    | WhileExpr
+    | ForLoopExpr
+    | BlockExpr ;
+
+LiteralExpr = 
+    | string
+    | integer
+    | true
+    | false ;
+
+InfixExpr = Expr InfixOp Expr ;
+
+InfixOp = '+' | '-' | '/' | '*' | "==" | '>' | ">=" | '<' | "<=" | "!=" | "=" | ".." | "..." ;
+
+PrefixExpr = PrefixOp Expr ;
+
+PrefixOp = '-' | '!' ;
+
+ContinueExpr = continue ;
+
+ReturnExpr = return Expr? ;
+
+BreakExpr = break Expr? ;
+
+GroupExpr = '(' Expr ')' ;
+
+ArrayExpr = '[' Expr (',' Expr)* ','? ']' ;
+
+CallExpr = Expr '(' CallParams? ')' ;
+
+CallParams = Expr (',' Expr)* ','? ;
+
+IndexExpr = Expr '[' Expr ']' ;
+
+FieldAccessExpr = Expr '.' ident ;
+
+MethodCallExpr = Expr '.' ident '(' CallParams? ')' ;
+
+TupleExpr = '(' TupleElements? ')' ;
+
+TupleElements = (Expr ',')+ Expr? ;
+
+TypeExpr = 
+    | TupleType
+    | ArrayType
+    | GroupType
+    | ident
+    | FunctionType ;
+
+TupleType = '(' ')' | '(' (TypeExpr ',')+ TypeExpr? ')' ;
+
+ArrayType = '[' TypeExpr ';' integer ']'
+
+GroupType = '(' TypeExpr ')' ;
+
+FunctionType = fn '(' TypeExpr ')'
+
+FunctionTypeParams = TypeExpr (',' TypeExpr)* ','? ;

@@ -33,6 +33,7 @@ pub fn tag_is_unaryop(tag: Tag) -> bool {
 }
 
 pub fn tag_is_literal(tag: Tag) -> bool {
+
     match tag {
         Tag::Ident | Tag::String | Tag::Number | Tag::Bool => true,
         _ => false,

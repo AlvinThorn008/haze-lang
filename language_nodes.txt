@@ -1,0 +1,95 @@
+Ident
+
+Str
+
+Bool
+
+Int
+
+Group { expr: Expr }
+
+Infix { left: Expr, op: Token, right: Expr }
+
+Prefix { op: Token, right: Expr }
+
+BlockExpr { body: StmtList }
+
+IfExpr { condition: Expr, consequence: BlockExpr, alternate: IfAlt }
+
+IfAlt <ElseIf: IfExpr, Else: BlockExpr>
+
+WhileExpr { condition: Expr, consequence: BlockExpr }
+
+ReturnExpr { value: Expr }
+
+AssignExpr { ident: Ident, value: Expr }
+
+CallExpr { name: Ident, args: ArgList }
+
+ArrayExpr { items: [Expr] }
+
+BreakExpr { value: Expr }
+
+ContinueExpr { label: Ident }
+
+FnDef { name: Ident, params: ParamList, body: BlockExpr, return_type: TypeExpr }
+
+VarDecl { name: Ident, var_type: TypeExpr, value: Expr }
+
+ExprStmt { expr: Expr }
+
+EmptyStmt
+
+StmtList { items: [Stmt] }
+
+TopLevelDecl <Mod: Module, Import: ImportDecl, Enum: EnumDecl, Fn: FnDef, Struct: StructDecl, Type: TypeAlias, Const: ConstDecl>
+
+Module { decls: [TopLevelDecl] }
+
+ImportDecl { path: [Ident] }
+
+EnumDecl { name: Ident, variants: VariantList }
+
+VariantList { items: [Variant] }
+
+Variant { tag: Ident, variant_type: Ident }
+
+StructDecl { name: Ident, fields: FieldList }
+
+FieldList { items: [Field] }
+
+Field { name: Ident, field_type: TypeExpr }
+
+TypeAlias { name: Ident, type_expr: TypeExpr }
+
+ConstDecl { name: Ident, const_type: TypeExpr, value: Expr }
+
+MethodCall { receiver: Expr, method_name: Ident, args: ArgList }
+
+FieldAccessExpr { parent: Expr, field_name: Ident }
+
+IndexExpr { container: Expr, index: Expr }
+
+Expr <Ident, Str, Int, Bool, Infix, Prefix, ContinueExpr, BreakExpr, ReturnExpr, Group, ArrayExpr, CallExpr, IndexExpr, FieldAccessExpr, MethodCall, TupleExpr, IfExpr, WhileExpr, BlockExpr>
+
+TupleExpr { items: [Expr] }
+
+ArgList { args: [Expr] }
+
+TypeExpr <TupleType, ArrayType, GroupType, Ident, FnType>
+
+TupleType { items: [TypeExpr] }
+
+ArrayType { element_type: TypeExpr, len: Int }
+
+GroupType { inner_type: TypeExpr }
+
+FnType { params: FnTypeParamList }
+
+FnTypeParamList { items: [TypeExpr] }
+
+Stmt <VarDecl, ExprStmt>
+
+ParamList { items: [Param] }
+
+Param { ident: Ident, param_type: TypeExpr }

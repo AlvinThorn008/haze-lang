@@ -1,11 +1,14 @@
 use crate::lexer::Lexer;
-use crate::token::{Tag, Token};
+use crate::token::{Tag, Token, self};
 use crate::ast::*;
 use crate::bumping::{Vec, Box};
 use crate::errors::*;
 use bumpalo::Bump;
 
 /// Advance the lexer and return the expr
+/// 
+/// This macro mainly exists for consuming a token in the branch
+/// it was identified. See `Parser::parse_prefix`
 macro_rules! next_and_return {
     ($parser:ident, $exp:expr) => {{
         $parser.next();
@@ -28,11 +31,15 @@ pub struct Parser<'a, 'bump> {
     tokens: Lexer<'a>,
     /// backing allocator for node allocation
     bump: &'bump Bump,
-    errors: std::vec::Vec<ParseError<'a>>
+    errors: std::vec::Vec<ParseError>
 }
 
 pub type Program<'a, 'bump> = Vec<'bump, Node<'a, 'bump>>;
-type InfixParser = for<'a, 'bump> fn(&mut Parser<'a, 'bump>) -> Result<Expr<'a, 'bump>, &'static str>;
+type InfixParser = for<'a, 'bump> fn(&mut Parser<'a, 'bump>) -> Result<Expr<'a, 'bump>, ParseError>;
+pub type PResult<Node> = Result<Node, ParseError>;
+
+use ParseErrorKind::*;
+use serde::de::Expected;
 
 impl<'a, 'bump> Parser<'a, 'bump> {
     /// Constructs a new parser given a source string
@@ -45,19 +52,20 @@ impl<'a, 'bump> Parser<'a, 'bump> {
     /// ", &bump);
     /// let tree = parser.parse();
     /// ```
-    pub fn new(source: &'a str, allocator: &'bump Bump) -> Self {
+    pub fn new(source: &'a str, allocator: &'bump Bump,) -> Self {
+        let mut tokens = Lexer::from(source);
         Self {
-            tokens: Lexer::from(source),
+            tokens: tokens,
             bump: allocator,
             errors: std::vec::Vec::with_capacity(50)
         }
     }
 
     /// Produces a AST 
-    pub fn parse(&mut self) -> Result<Program<'a, 'bump>, &'static str> {
+    pub fn parse(&mut self) -> PResult<Program<'a, 'bump>> {
         let mut program = Program::new_in(self.bump);
 
-        while let Some(t) = self.peek() {
+        while let Some(_) = self.peek() {
             let item = self.parse_statement().map(Into::<Node>::into)?;
             program.0.push(item);
         }
@@ -65,8 +73,8 @@ impl<'a, 'bump> Parser<'a, 'bump> {
         return Ok(program);
     }
 
-    fn parse_statement(&mut self) -> Result<Stmt<'a, 'bump>, &'static str> {
-        let tok = self.peek().expect("self.tokens shouldn't be consumed");
+    fn parse_statement(&mut self) -> PResult<Stmt<'a, 'bump>> {
+        let tok = self.peek().expect("self.token should have checked ");
 
         match tok.tag {
             Tag::Fn => Ok(Stmt::FuncDecl(Box::new_in(self.bump, self.parse_func_decl()?))),
@@ -76,43 +84,38 @@ impl<'a, 'bump> Parser<'a, 'bump> {
         }
     }
 
-    fn parse_item(&mut self) -> Result<Item<'a, 'bump>, &'static str> {
-        let tok = self.peek().expect("self.tokens shouldn't be consumed");
-
-        match tok.tag {
-            Tag::Fn => Ok(Item::FuncDecl(Box::new_in(self.bump, self.parse_func_decl()?))),
-            _ => Err("Not an item")
-        }
+    fn parse_var_decl(&mut self) -> PResult<VarDecl<'a, 'bump>> {
+        todo!()
     }
 
-    fn parse_func_decl(&mut self) -> Result<FuncDecl<'a, 'bump>, &'static str> {
+    fn parse_expr_stmt(&mut self) -> PResult<ExprStmt<'a, 'bump>> {
+        todo!()
+    }
+
+    fn parse_func_decl(&mut self) -> PResult<FuncDecl<'a, 'bump>> {
         let _ = self.next().expect("self.tokens shouldn't be consumed"); // consume`fn` keyword
-        let name = self
-            .eat_token(Tag::Ident)
-            .map(Ident)
-            .ok_or("Identifier expected")?;
+        let loc = self.loc(1);
+        let name = Ident(self.expect_token(Tag::Ident, Expected(Tag::Ident)));
         let mut params: Vec<'bump, Ident<'a>> = Vec::new_in(self.bump);
-        self.eat_token(Tag::LParen).ok_or("Left paren expected")?;
+        self.expect_token(Tag::LParen, ExpectedLBrace);
 
         // Early return for functions without parameters
         match self.eat_token(Tag::RParen) {
             Some(_) => {
-                return Ok(FuncDecl {
-                    name,
-                    params,
-                    body: self.parse_block_stmt()?,
+                return Ok(FuncDecl { 
+                    name, 
+                    params, 
+                    body: self.parse_block_stmt()?
                 })
             }
             None => {}
-        };
+        }
 
         // Parameter parsing
         loop {
-            params.0.push(
-                self.eat_token(Tag::Ident)
-                    .map(Ident)
-                    .ok_or("Missing identifier")?,
-            );
+            params.0.push(Ident(
+                self.expect_token(Tag::Ident, Expected(Tag::Ident))
+            ));
 
             // RParen or Comma is expected after an ident
             match self.peek() {
@@ -123,58 +126,20 @@ impl<'a, 'bump> Parser<'a, 'bump> {
                 Some(tok) if tok.tag == Tag::Comma => {
                     self.next();
                 }
-                _ => return Err("Expected right paren or comma"),
+                _ => break self.add_error(Expected(Tag::Comma), self.loc(1)),
             }
         }
 
-        Ok(FuncDecl {
-            name,
-            params,
-            body: self.parse_block_stmt()?,
-        })
+        Ok(FuncDecl { name, params, body: self.parse_block_stmt()? })
     }
 
-    fn parse_var_decl(&mut self) -> Result<VarDecl<'a, 'bump>, &'static str> {
-        let _ = self.next().expect("self.tokens shouldn't be consumed"); // consume let keyword
-        let name = self
-            .eat_token(Tag::Ident)
-            .map(Ident)
-            .ok_or("Identifier expected")?;
-
-        match self.peek() {
-            Some(tok) if tok.tag == Tag::Equal => {
-                self.next();
-            }
-            Some(tok) if tok.tag == Tag::Semicolon => {
-                self.next();
-                return Ok(VarDecl { name, value: None }); // uninitialized var decl
-            }
-            _ => return Err("Unexpected token"),
-        };
-
-        let value = Some(self.parse_expr()?);
-
-        self.eat_token(Tag::Semicolon).ok_or("Expected `;`")?;
-
-        Ok(VarDecl { name, value })
-    }
-
-    fn parse_expr_stmt(&mut self) -> Result<ExprStmt<'a, 'bump>, &'static str> {
-        let expr = self.parse_expr()?;
-        match expr {
-            Expr::If(_) | Expr::While(_) | Expr::Block(_) => self.lazy_eat(Tag::Semicolon),
-            _ => { self.eat_token(Tag::Semicolon).ok_or("Expected semicolon after expression without block")?; }
-        };
-        Ok(ExprStmt { expr })
-    }
-
-    fn parse_block_stmt(&mut self) -> Result<BlockStmt<'a, 'bump>, &'static str> {
+    fn parse_block_stmt(&mut self) -> PResult<BlockStmt<'a, 'bump>> {
         self.parse_block_expr()
             .map(|expr| BlockStmt { body: expr.body })
     }
 
-    fn parse_block_expr(&mut self) -> Result<BlockExpr<'a, 'bump>, &'static str> {
-        self.eat_token(Tag::LBrace).ok_or("Expected `{`")?;
+    fn parse_block_expr(&mut self) -> PResult<BlockExpr<'a, 'bump>> {
+        let lbrace = self.expect_token(Tag::LBrace, Expected(Tag::LBrace));
 
         let mut stmts = Vec::new_in(self.bump);
 
@@ -187,18 +152,18 @@ impl<'a, 'bump> Parser<'a, 'bump> {
                 tok => {
                     stmts.0.push(self.parse_statement()?);
                 }
-                None => return Err("RBrace not found"),
+                None => break self.add_error(Expected(Tag::RBrace), self.loc(1)),
             }
         }
 
         Ok(BlockExpr { body: Box(stmts.0.into_boxed_slice()) })
     }
 
-    fn parse_expr(&mut self) -> Result<Expr<'a, 'bump>, &'static str> {
+    fn parse_expr(&mut self) -> PResult<Expr<'a, 'bump>> {
         self.parse_expr_bp(0)
     }
 
-    fn parse_if_expr(&mut self) -> Result<IfExpr<'a, 'bump>, &'static str> {
+    fn parse_if_expr(&mut self) -> PResult<IfExpr<'a, 'bump>> {
         let _ = self.next().expect("self.tokens shouldn't be consumed"); // if keyword
         let condition = self.parse_expr()?;
         let consequence = self.parse_block_expr()?;
@@ -227,7 +192,9 @@ impl<'a, 'bump> Parser<'a, 'bump> {
                 // Parse else block
                 alternate = Some(Box::new_in(self.bump, IfAlt::Else(self.parse_block_expr()?)))
             }
-            _ => return Err("Abort!!! brace missing - ifs lost"),
+            // Bro I have no clue what happens here
+            _ => return Err(ParseError { kind: Expected(Tag::LBrace), location: self.loc(1) })
+            // _ => return Err("Abort!!! brace missing - ifs lost"),
         };
 
         Ok(IfExpr {
@@ -237,7 +204,7 @@ impl<'a, 'bump> Parser<'a, 'bump> {
         })
     }
 
-    fn parse_while_expr(&mut self) -> Result<WhileExpr<'a, 'bump>, &'static str> {
+    fn parse_while_expr(&mut self) -> PResult<WhileExpr<'a, 'bump>> {
         let _ = self.next().expect("self.tokens shouldn't be consumed");
         let condition = self.parse_expr()?;
         let consequence = self.parse_block_expr()?;
@@ -248,7 +215,7 @@ impl<'a, 'bump> Parser<'a, 'bump> {
         })
     }
 
-    fn parse_return_expr(&mut self) -> Result<ReturnExpr<'a, 'bump>, &'static str> {
+    fn parse_return_expr(&mut self) -> PResult<ReturnExpr<'a, 'bump>> {
         let _ = self.next().expect("self.tokens shouldn't be consumed"); // consume return keyword
 
         match self.peek() {
@@ -258,11 +225,17 @@ impl<'a, 'bump> Parser<'a, 'bump> {
             Some(tok) => Ok(ReturnExpr {
                 value: Some(self.parse_expr()?),
             }),
-            None => Err("Expected `:`, `}` or an operator"),
+            None => {
+                // For now, we'll group errors based on their location.
+                self.add_error(ExpectedExpr, self.loc(1));
+                self.add_error(Expected(Tag::Semicolon), self.loc(1));
+                Ok(ReturnExpr { value: None })
+            }
+            // None => Err("Expected `;`, `}` or an operator"),
         }
     }
 
-    fn parse_break_expr(&mut self) -> Result<BreakExpr<'a, 'bump>, &'static str> {
+    fn parse_break_expr(&mut self) -> PResult<BreakExpr<'a, 'bump>> {
         let _ = self.next().expect("self.tokens shouldn't be consumed"); // consume return keyword
 
         match self.peek() {
@@ -272,12 +245,18 @@ impl<'a, 'bump> Parser<'a, 'bump> {
             Some(tok) => Ok(BreakExpr {
                 value: Some(self.parse_expr()?),
             }),
-            None => Err("Expected `:`, `}` or an operator"),
+            None => {
+                // For now, we'll group errors based on their location.
+                self.add_error(ExpectedExpr, self.loc(1));
+                self.add_error(Expected(Tag::Semicolon), self.loc(1));
+                Ok(BreakExpr { value: None })
+            }
+            // None => Err("Expected `:`, `}` or an operator"),
         }
     }
 
     // Core expression parser based on Pratt parsing
-    fn parse_expr_bp(&mut self, min_bp: u8) -> Result<Expr<'a, 'bump>, &'static str> {
+    fn parse_expr_bp(&mut self, min_bp: u8) -> PResult<Expr<'a, 'bump>> {
         let mut lhs = self.parse_prefix()?;
 
         loop {
@@ -304,32 +283,32 @@ impl<'a, 'bump> Parser<'a, 'bump> {
         Ok(lhs)
     }
 
-    fn parse_postfix(&mut self, tag: Tag) -> Option<(u8, InfixParser)> {
+    // fn parse_postfix(&mut self, tag: Tag) -> Option<(u8, InfixParser)> {
 
-        macro_rules! infix_expr {
-            ($self:ident,$bp:literal) => {{
-                ($bp, |self_| { self_.parse_expr_bp($bp + 1) })
-            }};
-        }
+    //     macro_rules! infix_expr {
+    //         ($self:ident,$bp:literal) => {{
+    //             ($bp, |self_| { self_.parse_expr_bp($bp + 1) })
+    //         }};
+    //     }
 
-        // Notice how the binding powers are consecutive odd numbers. 
-        // This is because the right binding power of any infix operator is
-        // its left binding power plus 1. This prevents clashing.
-        // e.g. + and - have a left bp of 1 and a right bp of 2
-        match tag {
-            Tag::Minus | Tag::Plus => Some(infix_expr!(self, 1)),
-            Tag::Slash | Tag::Asterisk => Some(infix_expr!(self, 3)),
-            Tag::BangEqual
-            | Tag::Greater
-            | Tag::GreaterEqual
-            | Tag::Less
-            | Tag::LessEqual
-            | Tag::EqualEqual => Some(infix_expr!(self, 5)),
-            _ => None
-        }
-    }
+    //     // Notice how the binding powers are consecutive odd numbers. 
+    //     // This is because the right binding power of any infix operator is
+    //     // its left binding power plus 1. This prevents clashing.
+    //     // e.g. + and - have a left bp of 1 and a right bp of 2
+    //     match tag {
+    //         Tag::Minus | Tag::Plus => Some(infix_expr!(self, 1)),
+    //         Tag::Slash | Tag::Asterisk => Some(infix_expr!(self, 3)),
+    //         Tag::BangEqual
+    //         | Tag::Greater
+    //         | Tag::GreaterEqual
+    //         | Tag::Less
+    //         | Tag::LessEqual
+    //         | Tag::EqualEqual => Some(infix_expr!(self, 5)),
+    //         _ => None
+    //     }
+    // }
 
-    fn parse_prefix(&mut self) -> Result<Expr<'a, 'bump>, &'static str> {
+    fn parse_prefix(&mut self) -> PResult<Expr<'a, 'bump>> {
         let tok = self.peek().expect("self.tokens should not be consumed");
         match tok.tag {
             Tag::Ident => {
@@ -356,8 +335,9 @@ impl<'a, 'bump> Parser<'a, 'bump> {
             Tag::LParen => {
                 self.next();
                 let lhs = self.parse_expr()?;
-                self.eat_token(Tag::RParen)
-                    .ok_or("Missing closing parenthesis")?;
+                self.add_error(Expected(Tag::RParen), self.loc(1));
+                // self.eat_token(Tag::RParen)
+                //     .ok_or("Missing closing parenthesis")?;
                 Ok(Expr::Group(Box::new_in(self.bump, Group(lhs))))
             }
             Tag::LBracket => self.consume_array_expr(),
@@ -367,12 +347,13 @@ impl<'a, 'bump> Parser<'a, 'bump> {
             Tag::LBrace => Ok(Expr::Block(Box::new_in(self.bump, self.parse_block_expr()?))),
             Tag::Break => Ok(Expr::Break(Box::new_in(self.bump, self.parse_break_expr()?))),
             _ => {
-                return Err("Expected expression")
+                // We really need null nodes
+                return Err(ParseError { kind: ExpectedExpr, location: self.loc(1) })
             }
         }
     }
 
-    fn consume_assignment(&mut self, tok: Token<'a>) -> Result<Expr<'a, 'bump>, &'static str> {
+    fn consume_assignment(&mut self, tok: Token<'a>) -> PResult<Expr<'a, 'bump>> {
         self.next();
         Ok(Expr::Assign(Box::new_in(self.bump, AssignExpr { 
             ident: Ident(tok), 
@@ -380,14 +361,15 @@ impl<'a, 'bump> Parser<'a, 'bump> {
         })))
     }
 
-    fn consume_call_expr(&mut self, tok: Token<'a>) -> Result<Expr<'a, 'bump>, &'static str> {
+    fn consume_call_expr(&mut self, tok: Token<'a>) -> PResult<Expr<'a, 'bump>> {
         self.next(); // LParen
         let mut args = Vec::new_in(self.bump);
 
         while self.eat_token(Tag::RParen).is_none() {
             let arg = match self.parse_expr() {
                 Ok(expr) => expr,
-                Err(_) => return Err("Expected Identifier or RParen")
+                Err(_) => { self.add_error(Expected(Tag::Ident), self.loc(1)); break; }
+                // Err(_) => return Err("Expected Identifier or RParen")
             };
 
             args.0.push(arg);
@@ -409,14 +391,15 @@ impl<'a, 'bump> Parser<'a, 'bump> {
         })))
     }
 
-    fn consume_array_expr(&mut self) -> Result<Expr<'a, 'bump>, &'static str> {
+    fn consume_array_expr(&mut self) -> PResult<Expr<'a, 'bump>> {
         self.next(); // LParen
         let mut items = Vec::new_in(self.bump);
 
         while self.eat_token(Tag::RBracket).is_none() {
             let item = match self.parse_expr() {
                 Ok(expr) => expr,
-                Err(_) => return Err("Expected Identifier or RParen")
+                Err(_) => { self.add_error(Expected(Tag::Ident), self.loc(1)); break; }
+                // Err(_) => return Err("Expected Identifier or RParen")
             };
 
             items.0.push(item);
@@ -437,6 +420,14 @@ impl<'a, 'bump> Parser<'a, 'bump> {
         })))
     }
 
+    fn add_error(&mut self, kind: ParseErrorKind, loc: Loc) {
+        self.errors.push(ParseError {
+            kind,
+            location: loc
+        });
+    }
+
+
     pub fn lazy_eat(&mut self, tag: Tag) {
         match self.peek() {
             Some(tok) if tok.tag == tag => {
@@ -450,6 +441,23 @@ impl<'a, 'bump> Parser<'a, 'bump> {
         self.tokens.clone().next()
     }
 
+    fn expect_token_loc(&mut self, token_tag: Tag, kind: ParseErrorKind, loc: Loc) -> Token<'a> {
+        self.eat_token(token_tag)
+            .unwrap_or_else(|| {
+                self.add_error(kind, loc);
+                Token::empty()
+            })
+    }
+
+    fn expect_token(&mut self, token_tag: Tag, kind: ParseErrorKind) -> Token<'a> {
+        let loc = self.loc(1);
+        self.eat_token(token_tag)
+            .unwrap_or_else(|| {
+                self.add_error(kind, loc);
+                Token::empty()
+            })
+    }
+
     fn eat_token(&mut self, token_tag: Tag) -> Option<Token<'a>> {
         (self.peek()?.tag == token_tag).then(|| self.tokens.next().unwrap())
     }
@@ -457,6 +465,8 @@ impl<'a, 'bump> Parser<'a, 'bump> {
     fn next(&mut self) -> Option<Token<'a>> {
         self.tokens.next()
     }
+
+    fn loc(&self, len: u32) -> Loc { Loc::new(self.tokens.offset, len, self.tokens.line) }
 }
 
 mod expr {
